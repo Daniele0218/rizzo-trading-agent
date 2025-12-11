@@ -11,6 +11,7 @@ import os
 import json
 import db_utils
 from dotenv import load_dotenv
+import psycopg2  # <-- aggiunto per la migrazione DB
 
 # Carica eventuali variabili da .env (solo locale).
 # Su Railway useremo le variabili d'ambiente che hai messo nella tab Variables.
@@ -32,10 +33,39 @@ if not PRIVATE_KEY or not WALLET_ADDRESS:
         "Controlla la sezione Variables del servizio su Railway."
     )
 
+def ensure_stop_loss_column():
+    """
+    Migrazione semplice: assicura che la colonna stop_loss_percent
+    esista nella tabella bot_operations. Se non esiste, la crea.
+    """
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        print("[DB] DATABASE_URL non impostata, salto migrazione stop_loss_percent.")
+        return
+
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            ALTER TABLE IF EXISTS bot_operations
+            ADD COLUMN IF NOT EXISTS stop_loss_percent DOUBLE PRECISION;
+            """
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+        print("[DB] Colonna stop_loss_percent ok (creata o già esistente).")
+    except Exception as e:
+        print(f"[DB] Errore migrazione stop_loss_percent: {e}")
+
 # Inizializza (o verifica) lo schema del database: crea le tabelle se non esistono.
 print("[DB] Inizializzo (o verifico) lo schema del database...")
 db_utils.init_db()
 print("[DB] Schema del database pronto.")
+
+# Assicuro la presenza della colonna stop_loss_percent
+ensure_stop_loss_column()
 
 # Valori di default per evitare NameError nel blocco di except
 system_prompt = ""
