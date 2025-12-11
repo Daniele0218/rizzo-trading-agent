@@ -12,23 +12,39 @@ import json
 import db_utils
 from dotenv import load_dotenv
 
-# Carica eventuali variabili da .env (solo per uso locale).
-# Su Railway useremo LE VARIABILI D'AMBIENTE del servizio.
+# Carica eventuali variabili da .env (solo locale).
+# Su Railway useremo le variabili d'ambiente che hai messo nella tab Variables.
 load_dotenv()
 
 # Collegamento ad Hyperliquid
-TESTNET = False  # True = testnet, False = mainnet (occhio!)
+TESTNET = False  # True = testnet, False = mainnet (OCCHIO!)
 VERBOSE = True   # stampa informazioni extra
 
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 WALLET_ADDRESS = os.getenv("WALLET_ADDRESS")
 
-# Debug leggero: stampa solo se ESISTONO, non il valore
+# Debug leggero: stampa solo se ESISTONO (True/False), non i valori.
 print(f"[DEBUG] PRIVATE_KEY settata: {bool(PRIVATE_KEY)}, WALLET_ADDRESS settata: {bool(WALLET_ADDRESS)}")
 
 if not PRIVATE_KEY or not WALLET_ADDRESS:
-    # Messaggio corretto: NON serve .env su Railway
-    raise RuntimeError("PRIVATE_KEY o WALLET_ADDRESS non trovate nelle variabili d'ambiente. Controlla le Railway Variables.")
+    raise RuntimeError(
+        "PRIVATE_KEY o WALLET_ADDRESS non trovate nelle variabili d'ambiente. "
+        "Controlla la sezione Variables del servizio su Railway."
+    )
+
+# Inizializza (o verifica) lo schema del database: crea le tabelle se non esistono.
+print("[DB] Inizializzo (o verifico) lo schema del database...")
+db_utils.init_db()
+print("[DB] Schema del database pronto.")
+
+# Valori di default per evitare NameError nel blocco di except
+system_prompt = ""
+tickers = ['BTC', 'ETH', 'SOL']
+indicators_json = {}
+news_txt = ""
+sentiment_json = {}
+forecasts_json = {}
+account_status = {}
 
 try:
     bot = HyperLiquidTrader(
@@ -58,7 +74,7 @@ try:
 
     # Scrivo su DB come sta
     snapshot_id = db_utils.log_account_status(account_status)
-    print(f"[db_utils] Operazione inserita con id={snapshot_id}")
+    print(f"[db_utils] Snapshot account inserito con id={snapshot_id}")
 
     # Creating System prompt
     with open('system_prompt.txt', 'r') as f:
@@ -83,9 +99,10 @@ try:
     with open('account_status_old.json', 'w') as f:
         json.dump(account_status['open_positions'], f, indent=4)
     snapshot_id = db_utils.log_account_status(account_status)
-    print(f"[db_utils] Operazione inserita con id={snapshot_id}")
+    print(f"[db_utils] Snapshot finale inserito con id={snapshot_id}")
 
 except Exception as e:
+    # Qui ora tutte le variabili esistono (anche se vuote), quindi niente NameError
     db_utils.log_error(
         e,
         context={
@@ -95,7 +112,7 @@ except Exception as e:
             "news": news_txt,
             "sentiment": sentiment_json,
             "forecasts": forecasts_json,
-            "balance": account_status
+            "balance": account_status,
         },
         source="trading_agent"
     )
